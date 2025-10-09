@@ -82,7 +82,7 @@ fn main() {
         i += 1;
     }
     println!("{}", s);
-    //pentru al treilea exercitiu
+    //pentru al treilea exercitiu //trebuie automatizat (cred)
     let mut s = String::new();
     add_space(&mut s, 40);
     add_str(&mut s, "I 💚\n");
