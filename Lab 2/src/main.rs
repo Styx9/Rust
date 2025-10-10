@@ -21,21 +21,24 @@ fn add_str(s1: &mut String, s2: &str) {
     s1.push_str(s2);
 }
 fn add_integer(s: &mut String, mut nr: i32) {
-    let mut inv = 0;
-    while nr != 0 {
-        inv = 10 * inv + nr % 10;
-        nr /= 10;
-    }
+    if nr == 0{
+        s.push('0');
+        return;}
+    let mut temp = String::new();
     let mut i = 0;
-    while inv != 0 {
+
+    while nr != 0 {
         if i == 3 {
-            s.push('_');
+            temp.push('_');
             i = 0;
         }
-        let c = ((inv % 10) as u8 + b'0') as char;
-        s.push(c);
+        let c = ((nr % 10) as u8 + b'0') as char;
+        temp.push(c);
         i += 1;
-        inv /= 10;
+        nr /= 10;
+    }
+    while let Some(ch) = temp.pop(){
+        s.push(ch);
     }
 }
 fn add_float(s: &mut String, nr: f32) {
@@ -82,36 +85,22 @@ fn main() {
         i += 1;
     }
     println!("{}", s);
-    //pentru al treilea exercitiu //trebuie automatizat (cred)
+    //pentru al treilea exercitiu
     let mut s = String::new();
-    add_space(&mut s, 40);
-    add_str(&mut s, "I 💚\n");
-    add_space(&mut s, 40);
-    add_str(&mut s, "RUST.\n\n");
-    add_space(&mut s, 4);
-    add_str(&mut s, "Most");
-    add_space(&mut s, 12);
-    add_str(&mut s, "crate");
-    add_space(&mut s, 6);
-    add_integer(&mut s, 306437968);
-    add_space(&mut s, 11);
-    add_str(&mut s, "and");
-    add_space(&mut s, 5);
-    add_str(&mut s, "lastest");
-    add_space(&mut s, 9);
-    add_str(&mut s, "is\n");
-    add_space(&mut s, 9);
-    add_str(&mut s, "downloaded");
-    add_space(&mut s, 8);
-    add_str(&mut s, "has");
-    add_space(&mut s, 13);
-    add_str(&mut s, "downloads");
-    add_space(&mut s, 5);
-    add_str(&mut s, "the");
-    add_space(&mut s, 9);
-    add_str(&mut s, "version");
-    add_space(&mut s, 4);
-    add_float(&mut s, 2.038);
+    add_space(&mut s, 40); add_str(&mut s, "I 💚\n");
+    add_space(&mut s, 40); add_str(&mut s, "RUST.\n");
+    add_space(&mut s, 4);  add_str(&mut s, "Most");
+    add_space(&mut s, 12); add_str(&mut s, "crate");
+    add_space(&mut s, 6);  add_integer(&mut s, 306437968);
+    add_space(&mut s, 11); add_str(&mut s, "and");
+    add_space(&mut s, 5);  add_str(&mut s, "lastest");
+    add_space(&mut s, 9);  add_str(&mut s, "is\n");
+    add_space(&mut s, 9);  add_str(&mut s, "downloaded");
+    add_space(&mut s, 8);  add_str(&mut s, "has");
+    add_space(&mut s, 13); add_str(&mut s, "downloads");
+    add_space(&mut s, 5);  add_str(&mut s, "the");
+    add_space(&mut s, 9);  add_str(&mut s, "version");
+    add_space(&mut s, 4);  add_float(&mut s, 2.038);
     add_str(&mut s, ".\n");
     println!("{}", s);
 }
