@@ -1,0 +1,18 @@
+ping
+ping abc
+
+COUNT
+count
+count a b c
+count a
+count a             b
+   count a             b   
+
+length hello world
+
+times
+times
+times abc
+
+stpo
+stop
