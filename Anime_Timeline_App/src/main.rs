@@ -1,6 +1,6 @@
 mod api;
 mod app;
-use iced::{Settings,Theme};
+use iced::{Theme};
 use app::AnimeTimeline;
 
 fn main() -> iced::Result {
