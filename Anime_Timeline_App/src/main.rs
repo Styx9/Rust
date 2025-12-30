@@ -1,5 +1,6 @@
 mod api;
 mod app;
+mod storage;
 use iced::{Theme};
 use app::AnimeTimeline;
 

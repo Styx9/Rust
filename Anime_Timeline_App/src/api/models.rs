@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize)]
 
 pub struct AnimeResponse{
@@ -6,7 +6,7 @@ pub struct AnimeResponse{
 }
 
 
-#[derive(Debug,Clone, Deserialize)]
+#[derive(Debug,Clone, Deserialize,Serialize)]
 pub struct AnimeItem{
     pub mal_id: u32,
     pub title: String,
@@ -15,7 +15,7 @@ pub struct AnimeItem{
     pub score: Option<f64>,
     pub aired : Aired //jikan n-il da intrun obj
 }
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone,Serialize)]
 pub struct Aired{
     pub string: Option<String>,
 }
@@ -29,11 +29,11 @@ pub struct EpisodeItem{
     pub title: String,
     pub aired: Option<String>,
 }
-#[derive(Debug,Clone, Deserialize)]
+#[derive(Debug,Clone, Deserialize,Serialize)]
 pub struct Images{
     pub jpg: ImageFormats,
 }
-#[derive(Debug,Clone, Deserialize)]
+#[derive(Debug,Clone, Deserialize,Serialize)]
 pub struct ImageFormats{
     pub image_url: String,
 }
