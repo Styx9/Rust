@@ -12,6 +12,7 @@ use crate::api::jikan;
 pub enum Screen{
     Search,
     Detail(AnimeItem,Vec<EpisodeItem>,Option<Handle>),
+    SearchOverlay,
 }
 
 pub struct AnimeTimeline{
@@ -61,6 +62,7 @@ impl AnimeTimeline{
         }
         Message::SearchRequested => {
             self.is_loading = true;
+            self.current_screen = Screen::SearchOverlay;
             let query = self.search_text.clone();
             Task::perform(
             async move{
@@ -138,6 +140,7 @@ impl AnimeTimeline{
         Message::ClearSearch => {
             self.search_text = String::new();
             self.search_result.clear();
+            self.current_screen =Screen::Search;
             Task::none()
         }
         Message::LoadFavThumbs =>{
@@ -171,6 +174,7 @@ impl AnimeTimeline{
         match &self.current_screen{
             Screen::Search => self.view_search(),
             Screen::Detail(anime,episodes,img_handle ) => self.view_detail(anime,episodes, img_handle),
+            Screen::SearchOverlay=> self.view_search_overlay(),
         }
     }
     pub fn view_search(&self) -> Element<'_,Message>{
@@ -270,15 +274,44 @@ impl AnimeTimeline{
     .spacing(10)
     .into()
 }
-
+    fn view_search_overlay(&self) -> Element<'_,Message>
+    {
+         let search_bar = row![
+            text_input(
+                "Search anime...",
+                &self.search_text,
+            ).on_input(Message::SearchTextChanged).on_submit(Message::SearchRequested),
+            button("Search").on_press(Message::SearchRequested),
+            if !self.search_text.is_empty() || !self.search_result.is_empty() {
+                button("Clear X").on_press(Message::ClearSearch).style(button::danger)
+            }
+            else{
+                button("").width(0).padding(0)
+            }
+        ].spacing(10).align_y(Alignment::Center);
+        let results_column:Element<Message> = if self.is_loading
+        {
+            text ("Loading...").size(20).into()
+        } else { Column::with_children(
+            self.search_result.iter().map(|anime|{
+                button(text(&anime.title).size(18)).padding(10).on_press(Message::AnimeSelected(anime.clone())).width(iced::Length::Fill).into()   
+            })
+        )
+        .spacing(5).into()};
+        let results_area :Element<Message> = scrollable(results_column).height(Length::Fill).into();
+        column![
+            search_bar,
+            results_area,
+        ].padding(20).spacing(20).into()
+    }
 
     fn view_detail(&self, anime:&AnimeItem, episodes: &Vec<EpisodeItem>, img_handle:&Option<Handle>) -> Element<'_,Message>{
         let is_fav = self.favorites.iter().any(|f| f.mal_id == anime.mal_id);
         let fav_btn = if is_fav{
-            button("Unfavorite 💔").on_press(Message::ToggleFavorite((anime.clone())))
+            button("Unfavorite").on_press(Message::ToggleFavorite((anime.clone())))
         }
         else {
-            button("Favorite ❤️").on_press(Message::ToggleFavorite((anime.clone())))
+            button("Favorite").on_press(Message::ToggleFavorite((anime.clone())))
         };
         let img_element: Element<Message> = match img_handle{
             Some(handle) => image(handle.clone()).width(iced::Length::Fixed((200.0))).height(iced::Length::Fixed(300.0)).into(),
