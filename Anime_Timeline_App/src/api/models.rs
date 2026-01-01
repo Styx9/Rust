@@ -1,3 +1,4 @@
+use iced::alignment::Vertical::Top;
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize)]
 
@@ -37,3 +38,88 @@ pub struct Images{
 pub struct ImageFormats{
     pub image_url: String,
 }
+#[derive(Debug,Clone,Copy,PartialEq, Eq)]
+pub enum AnimeType {
+    Tv,Movie,Ova,Special,
+}
+impl AnimeType{
+    pub const ALL: [AnimeType; 4] = [
+        AnimeType::Tv,
+        AnimeType::Movie,
+        AnimeType::Ova,
+        AnimeType::Special,
+    ];
+    pub fn query_val(&self) -> &'static str{ //pt query in api
+        match self{
+            AnimeType::Tv => "tv",
+            AnimeType::Movie => "movie",
+            AnimeType::Ova => "ova",
+            AnimeType::Special => "special",
+        }
+    }
+}
+impl ToString for AnimeType {
+    fn to_string(&self) -> String{
+        match self{
+            Self::Tv => "TV",
+            Self::Movie => "Movie",
+            Self::Ova => "Ova",
+            Self::Special => "Special",
+        }.to_string()
+    }
+}
+#[derive(Debug,Clone,Copy,PartialEq, Eq)]
+pub enum SortMode{
+    ScoreDesc,
+    PopularityAsc,
+}
+impl SortMode{
+    pub const ALL: [SortMode; 2] = [
+        SortMode::ScoreDesc,
+        SortMode::PopularityAsc,
+    ];
+
+        pub fn order_by(&self) -> &'static str {
+        match self {
+            SortMode::ScoreDesc => "score",
+            SortMode::PopularityAsc => "popularity",
+        }
+    }
+
+    pub fn direction(&self) -> &'static str {
+        match self {
+            SortMode::ScoreDesc => "desc",
+            SortMode::PopularityAsc => "asc",
+        }
+    }
+}
+    impl ToString for SortMode{
+        fn to_string(&self) -> String{
+            match self{
+                Self::ScoreDesc => "Score (high -> low)",
+                Self::PopularityAsc => "Popularity (best->worst)",
+            }.to_string()
+        }
+    }
+#[derive(Debug,Clone,Copy,PartialEq, Eq)]
+pub struct Genre{
+    pub id:u32,
+    pub name: &'static str,
+}
+impl ToString for Genre {
+    fn to_string(&self) -> String{
+        self.name.to_string()
+    }
+}
+pub const BASIC_GENRES: [Genre; 10] = [
+    Genre { id: 1,  name: "Action" },
+    Genre { id: 2,  name: "Adventure" },
+    Genre { id: 4,  name: "Comedy" },
+    Genre { id: 8,  name: "Drama" },
+    Genre { id: 10, name: "Fantasy" },
+    Genre { id: 14, name: "Horror" },
+    Genre { id: 22, name: "Romance" },
+    Genre { id: 24, name: "Sci-Fi" },
+    Genre { id: 30, name: "Sports" },
+    Genre { id: 36, name: "Slice of Life" },
+];

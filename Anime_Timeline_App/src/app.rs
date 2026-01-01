@@ -1,5 +1,6 @@
-use crate::api::models::{AnimeItem,EpisodeItem};
-use iced::widget::{Column, Container, button, column, container, image, row, scrollable, text, text_input};
+use crate::api::models::{AnimeItem,EpisodeItem,AnimeType,SortMode,Genre,BASIC_GENRES};
+use iced::widget::shader::wgpu::QuerySet;
+use iced::widget::{Column, Container, button,pick_list, column, container, image, row, scrollable, text, text_input};
 use iced::{Element, Task, Theme,Length,Alignment};
 use iced::border::Border;
 use iced::widget::image::Handle;
@@ -22,6 +23,9 @@ pub struct AnimeTimeline{
     current_screen: Screen,
     favorites: Vec<AnimeItem>,
     fav_thumbs: HashMap<u32,Handle>, //key este mal_id
+    selected_genre: Option<Genre>,
+    selected_type: Option<AnimeType>,
+    selected_sort: SortMode,
 }
 impl Default for AnimeTimeline{
     fn default() -> Self{
@@ -32,6 +36,9 @@ impl Default for AnimeTimeline{
             current_screen: Screen::Search,
             favorites: crate::storage::load_fav(),
             fav_thumbs: HashMap::new(),
+            selected_genre: None,
+            selected_type: None,
+            selected_sort: SortMode::ScoreDesc,
         }
     }
 }
@@ -51,6 +58,10 @@ pub enum Message{
     ClearSearch,
     LoadFavThumbs,
     FavThumbLoaded{mal_id:u32,result: Result<Handle,String>},
+   GenreChanged(Genre),
+    TypeChanged(AnimeType),
+    SortChanged(SortMode),
+    ClearFilters,
 }
 impl AnimeTimeline{
    
@@ -61,12 +72,21 @@ impl AnimeTimeline{
             Task::none()
         }
         Message::SearchRequested => {
-            self.is_loading = true;
             self.current_screen = Screen::SearchOverlay;
+            self.is_loading = true;
             let query = self.search_text.clone();
+             if query.is_empty() {
+            self.search_result.clear();
+            self.is_loading = false;
+            return Task::none();
+            }
+            
+            let genre = self.selected_genre.map(|g| g.id);
+            let types = self.selected_type;
+            let sort = self.selected_sort;
             Task::perform(
             async move{
-                jikan::search_anime(query).await.map_err(|e| e.to_string())
+                jikan::search_anime(query,genre,types,sort).await.map_err(|e| e.to_string())
             },
                 Message::SearchResLoaded,
             )
@@ -168,6 +188,48 @@ impl AnimeTimeline{
             }
             Task::none()
         }
+        Message::TypeChanged(t) => {
+            self.selected_type = Some(t);
+            let query = self.search_text.trim().to_string();
+            if query.is_empty(){
+                return Task::none();
+            }
+            self.is_loading = true;
+
+            Task::done(Message::SearchRequested)
+        }
+        Message::GenreChanged(g) =>{
+            self.selected_genre = Some(g);
+            let query = self.search_text.trim().to_string();
+            if query.is_empty(){
+                return Task::none();
+            }
+            self.is_loading = true;
+            Task::done(Message::SearchRequested)
+        }
+        Message::SortChanged(s) => {
+            self.selected_sort = s;
+            let query = self.search_text.trim().to_string();
+            if query.is_empty(){
+                return Task::none();
+            }
+            self.is_loading = true;
+
+            Task::done(Message::SearchRequested)
+        }
+        Message::ClearFilters =>{
+            self.selected_genre = None;
+            self.selected_type = None;
+            self.selected_sort = SortMode::ScoreDesc;
+
+            let query = self.search_text.trim().to_string();
+            if query.is_empty(){
+                Task::none()
+            }
+            else {
+                Task::done(Message::SearchRequested)
+            }
+        }
       }
     }
     pub fn view(&self) -> Element<'_, Message>{
@@ -191,25 +253,9 @@ impl AnimeTimeline{
                 button("").width(0).padding(0)
             }
         ].spacing(10).align_y(Alignment::Center);
-
-        let content: Element<Message> = if self.is_loading{
-            text ("Loading...").size(20).into()
-        }
-        else if !self.search_result.is_empty(){
-            Column::with_children(
-                self.search_result.iter().map(|anime|{
-                    button(text(&anime.title).size(18)).padding(10).on_press(Message::AnimeSelected(anime.clone())).width(iced::Length::Fill).into()   
-                })
-            )
-            .spacing(5).height(Length::Shrink).into()
-        }
-        else {
-            Column::new().into()
-        };
         column![
             search_bar,
             self.view_fav(),
-            content
         ].padding(20).spacing(20).into()
     }
   fn view_fav(&self) -> Element<'_, Message> {
@@ -289,6 +335,27 @@ impl AnimeTimeline{
                 button("").width(0).padding(0)
             }
         ].spacing(10).align_y(Alignment::Center);
+        let type_pick = pick_list(
+            AnimeType::ALL.to_vec(),
+            self.selected_type,
+            Message::TypeChanged,
+        ).placeholder("Type");
+        let sort_pick = pick_list(
+            SortMode::ALL.to_vec(),
+            Some(self.selected_sort),
+            Message::SortChanged,
+        ).placeholder("Sort");
+        let genre_pick = pick_list(
+            BASIC_GENRES.to_vec(),
+            self.selected_genre,
+            Message::GenreChanged,
+        );
+        let filters = row![
+            genre_pick,
+            sort_pick,
+            type_pick,
+            button("Clear filters").on_press(Message::ClearFilters),
+        ].spacing(10).align_y(Alignment::Center);
         let results_column:Element<Message> = if self.is_loading
         {
             text ("Loading...").size(20).into()
@@ -301,6 +368,7 @@ impl AnimeTimeline{
         let results_area :Element<Message> = scrollable(results_column).height(Length::Fill).into();
         column![
             search_bar,
+            filters,
             results_area,
         ].padding(20).spacing(20).into()
     }
