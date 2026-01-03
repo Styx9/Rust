@@ -1,6 +1,6 @@
 use crate::api::models::{AnimeItem,EpisodeItem,AnimeType,SortMode,Genre,BASIC_GENRES};
 use iced::widget::shader::wgpu::QuerySet;
-use iced::widget::{Column, Container, button,pick_list, column, container, image, row, scrollable, text, text_input};
+use iced::widget::{Column, Container, button,pick_list, column, checkbox,container, image, row, scrollable, text, text_input};
 use iced::{Element, Task, Theme,Length,Alignment};
 use iced::border::Border;
 use iced::widget::image::Handle;
@@ -20,12 +20,14 @@ pub struct AnimeTimeline{
     search_text:String,
     search_result:Vec<AnimeItem>,
     is_loading:bool,
+    loading_episode: Option<u32>,
     current_screen: Screen,
     favorites: Vec<AnimeItem>,
     fav_thumbs: HashMap<u32,Handle>, //key este mal_id
     selected_genre: Option<Genre>,
     selected_type: Option<AnimeType>,
     selected_sort: SortMode,
+    watched: HashMap<u32,Vec<u32>>,
 }
 impl Default for AnimeTimeline{
     fn default() -> Self{
@@ -39,6 +41,8 @@ impl Default for AnimeTimeline{
             selected_genre: None,
             selected_type: None,
             selected_sort: SortMode::ScoreDesc,
+            loading_episode:None,
+            watched: crate::storage::load_watched(),
         }
     }
 }
@@ -62,6 +66,9 @@ pub enum Message{
     TypeChanged(AnimeType),
     SortChanged(SortMode),
     ClearFilters,
+    EpisodeClicked(u32),
+    EpisodeDetailLoaded{ep_nr:u32, result:Result<EpisodeItem,String>},
+    ToggleWatched{ anime_id: u32, ep_nr:u32},
 }
 impl AnimeTimeline{
    
@@ -229,6 +236,55 @@ impl AnimeTimeline{
             else {
                 Task::done(Message::SearchRequested)
             }
+        }
+        Message::EpisodeClicked(ep_nr) =>{
+            let anime_id = match &self.current_screen{
+                Screen::Detail(anime,_ ,_ ) => anime.mal_id,
+                _ => return Task::none(), //daca nu suntem in detail nu trb sa facem nimic
+            };
+            if let Screen::Detail(_,episodes ,_ ) = &self.current_screen{
+                if let Some(ep) = episodes.iter().find(|e| e.mal_id == ep_nr){
+                    if ep.synopsis.is_some(){
+                        return Task::none(); //daca am avut deja synopisul incarcat nu trb sa facem refetch
+                    }
+                }
+            }
+            self.loading_episode = Some(ep_nr);
+            Task::perform(
+                async move {
+                    jikan::get_episode_detail(anime_id,ep_nr).await.map_err(|e| e.to_string())
+                }, move |res| Message::EpisodeDetailLoaded { ep_nr, result: res })
+        }
+        Message::EpisodeDetailLoaded { ep_nr, result } =>{
+            self.loading_episode = None;
+
+            if let Ok(detail) = result {
+                if let Screen::Detail(anime,episodes ,img ) = &mut self.current_screen{
+                    if let Some(ep) = episodes.iter_mut().find(|e| e.mal_id == ep_nr){
+                        ep.synopsis = detail.synopsis;
+                    }
+                    self.current_screen = Screen::Detail(anime.clone(), episodes.clone(), img.clone());
+                }
+            }
+            Task::none()
+        }
+        Message::ToggleWatched { anime_id, ep_nr } =>{
+            let list = self.watched.entry(anime_id).or_insert(Vec::new());
+            let before = list.len();
+            list.retain(|&x| x!= ep_nr);
+            if list.len() == before {
+                list.push(ep_nr);
+            }
+
+            let remove_key = match self.watched.get(&anime_id){ //daca am dat untoggle la toate episoadele stergem si cheia
+                Some(v) => v.is_empty(),
+                None => false,
+            };
+            if remove_key{
+                self.watched.remove(&anime_id);
+            }
+            crate::storage::save_watched(&self.watched);
+            Task::none()
         }
       }
     }
@@ -418,10 +474,36 @@ impl AnimeTimeline{
                         }
                         None => "Unknown date"
                     };
-                    text(format!("{}. {} - {}",i+1,date_display,ep.title)).size(16).into()
+                    let ep_nr = (i as u32) + 1;
+                    let anime_id = anime.mal_id;
+                    let is_watched = match self.watched.get(&anime_id){
+                        Some(list) => list.contains(&ep_nr),
+                        None=>false,
+                    };
+                    let synopsis = if self.loading_episode == Some(ep_nr){
+                        "Loading synopsis".to_string()
+                    }
+                    else{
+                        match &ep.synopsis{
+                            Some(s) => s.trim().replace('\n', " "),
+                            None => String::new(),
+                        }
+                    };
+                   row![
+                    checkbox("",is_watched).on_toggle(move |_| {
+                        Message::ToggleWatched {anime_id,ep_nr}
+                    }),
+                    button(
+                column![
+                    text(format!("{}. {} - {}", i + 1, date_display, ep.title)).size(16),
+                    text(synopsis).size(14),
+                    ].spacing(2)
+                    ).on_press(Message::EpisodeClicked(ep_nr)).width(iced::Length::Fill).padding(6),
+                   ].spacing(10).align_y(iced::Alignment::Center).into()
                 })
-            ).spacing(5)).height(iced::Length::Fill).into()
-        };
+            ).spacing(5)
+        ).height(iced::Length::Fill).into()
+    };
         column![
             button("<- Back").on_press(Message::BackToSearch),
             header_row,

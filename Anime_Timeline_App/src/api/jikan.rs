@@ -1,5 +1,6 @@
+use iced::clipboard::read;
 use reqwest::Error;
-use crate::api::models::{AnimeResponse, AnimeItem,EpisodeItem,EpisodeResponse,AnimeType,SortMode};
+use crate::api::models::{AnimeItem, AnimeResponse, AnimeType, EpisodeItem, EpisodeResponse, EpisodeSingleResponse, SortMode};
 
 pub async fn search_anime(query:String,genre:Option<u32>,types: Option<AnimeType>,sort: SortMode) -> Result<Vec<AnimeItem>,Error>{
     let mut params: Vec<(&str,String)> = vec![("q",query)];
@@ -14,6 +15,12 @@ pub async fn search_anime(query:String,genre:Option<u32>,types: Option<AnimeType
     let client = reqwest::Client::new();
 
     let response = client.get("https://api.jikan.moe/v4/anime").query(&params).send().await?.json::<AnimeResponse>().await?;
+    Ok(response.data)
+}
+pub async fn get_episode_detail(anime_id:u32,ep_nr:u32) ->Result<EpisodeItem, Error>
+{
+    let url = format!("https://api.jikan.moe/v4/anime/{}/episodes/{}",anime_id,ep_nr);
+    let response = reqwest::get(url).await?.json::<EpisodeSingleResponse>().await?;
     Ok(response.data)
 }
 pub async fn get_episodes(id:u32) -> Result<Vec<EpisodeItem>,Error>{

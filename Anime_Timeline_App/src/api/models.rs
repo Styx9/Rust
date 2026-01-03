@@ -25,10 +25,15 @@ pub struct EpisodeResponse{
     pub data: Vec<EpisodeItem>,
 }
 #[derive(Debug, Deserialize, Clone)]
+pub struct EpisodeSingleResponse{
+    pub data: EpisodeItem,  //special ca sa putem adauga synopsis
+}
+#[derive(Debug, Deserialize, Clone)]
 pub struct EpisodeItem{
     pub mal_id: u32,
     pub title: String,
     pub aired: Option<String>,
+    pub synopsis: Option<String>,
 }
 #[derive(Debug,Clone, Deserialize,Serialize)]
 pub struct Images{
