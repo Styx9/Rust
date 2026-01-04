@@ -1,4 +1,3 @@
-use iced::clipboard::read;
 use reqwest::Error;
 use crate::api::models::{AnimeItem, AnimeResponse, AnimeType, EpisodeItem, EpisodeResponse, EpisodeSingleResponse, SortMode};
 
@@ -10,8 +9,9 @@ pub async fn search_anime(query:String,genre:Option<u32>,types: Option<AnimeType
     if let Some(t) = types {
         params.push(("type",t.query_val().to_string()));
     }
+    if sort != SortMode::Default{
     params.push(("order_by",sort.order_by().to_string()));
-    params.push(("sort",sort.direction().to_string()));
+    params.push(("sort",sort.direction().to_string()));}
     let client = reqwest::Client::new();
 
     let response = client.get("https://api.jikan.moe/v4/anime").query(&params).send().await?.json::<AnimeResponse>().await?;

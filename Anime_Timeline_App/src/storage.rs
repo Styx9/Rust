@@ -1,4 +1,4 @@
-use std::{f32::consts::E, fs};
+use std::fs;
 use crate::api::models::AnimeItem;
 use std::collections::HashMap;
 const F_NAME: &str = "favorites.json";

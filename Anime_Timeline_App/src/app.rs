@@ -1,19 +1,22 @@
 use crate::api::models::{AnimeItem,EpisodeItem,AnimeType,SortMode,Genre,BASIC_GENRES};
-use iced::widget::shader::wgpu::QuerySet;
-use iced::widget::{Column, Container, button,pick_list, column, checkbox,container, image, row, scrollable, text, text_input};
-use iced::{Element, Task, Theme,Length,Alignment};
-use iced::border::Border;
+use iced::widget::{Column, Container, button,pick_list, column, checkbox, image, row, scrollable, text, text_input};
+use iced::{Element, Task,Length,Alignment};
 use iced::widget::image::Handle;
-use iced::widget::scrollable::Direction;
-use reqwest::header;
 use std::collections::HashMap;
 use crate::api::jikan;
 
 #[derive(Debug, Clone)]
 pub enum Screen{
     Search,
-    Detail(AnimeItem,Vec<EpisodeItem>,Option<Handle>),
+    Detail(Box<DetailScreen>),
     SearchOverlay,
+}
+#[derive(Debug, Clone)]
+pub struct DetailScreen {
+    pub anime: AnimeItem,
+    pub episodes: Vec<EpisodeItem>,
+    pub img: Option<Handle>,
+    pub back_to: Box<Screen>,
 }
 
 pub struct AnimeTimeline{
@@ -40,7 +43,7 @@ impl Default for AnimeTimeline{
             fav_thumbs: HashMap::new(),
             selected_genre: None,
             selected_type: None,
-            selected_sort: SortMode::ScoreDesc,
+            selected_sort: SortMode::Default,
             loading_episode:None,
             watched: crate::storage::load_watched(),
         }
@@ -56,7 +59,7 @@ pub enum Message{
     //Pt Navigatie
     AnimeSelected(AnimeItem),//cand facem click
     EpisodesLoaded(Result<Vec<EpisodeItem>,String>),
-    BackToSearch,
+    Back,
     ImageLoaded(Result<Handle,String>),//pt incarcarea imaginii
     ToggleFavorite(AnimeItem), //pt a da "inima" unei serii
     ClearSearch,
@@ -110,7 +113,8 @@ impl AnimeTimeline{
             Task::none()
         }
         Message::AnimeSelected(anime)=>{
-            self.current_screen = Screen::Detail(anime.clone(), Vec::new(),None);
+            let prev = self.current_screen.clone();
+            self.current_screen = Screen::Detail(Box::new(DetailScreen{anime: anime.clone(), episodes: Vec::new(),img:None,back_to: Box::new(prev),}));
             self.is_loading = true;
 
             let id = anime.mal_id;
@@ -128,25 +132,42 @@ impl AnimeTimeline{
                 )
             ])
         }
-        Message::EpisodesLoaded(Ok(episodes)) =>{
-            if let Screen::Detail(anime,_,img_hndl) = &self.current_screen{
-                self.current_screen = Screen::Detail(anime.clone(),episodes, img_hndl.clone())
-            } // daca ni sa incarcat imaginea inainte facem update la screen dar pastram aceeasi imagine
-            self.is_loading = false;
-            Task::none()
-        }
+       Message::EpisodesLoaded(Ok(episodes)) => {
+    if let Screen::Detail(detail) = &self.current_screen {
+        self.current_screen = Screen::Detail(Box::new(DetailScreen {
+            anime: detail.anime.clone(),
+            episodes,
+            img: detail.img.clone(),
+            back_to: detail.back_to.clone(),
+        }));
+    } // daca ni sa incarcat imaginea inainte facem update la screen dar pastram aceeasi imagine
+    self.is_loading = false;
+    Task::none()
+}
+
         Message::EpisodesLoaded(Err(e)) =>{
             eprintln!("Episode Error: {}", e);
             self.is_loading = false;
             Task::none()
         }
-        Message::BackToSearch => {
-            self.current_screen = Screen::Search;
-            Task::done(Message::LoadFavThumbs)
+        Message::Back => {
+            if let Screen::Detail(detail) = &self.current_screen {
+                self.current_screen = *detail.back_to.clone();
+                if let Screen::Search = self.current_screen{
+                    return Task::done(Message::LoadFavThumbs);
+                }
+                return Task::none();
+            }
+            Task::none()
         }
         Message::ImageLoaded(Ok(handle)) => {
-            if let Screen::Detail(anime, episodes, _) = &self.current_screen{
-                self.current_screen = Screen::Detail(anime.clone(), episodes.clone(), Some(handle));
+        if let Screen::Detail(detail) = &self.current_screen {
+            self.current_screen = Screen::Detail(Box::new(DetailScreen {
+                anime: detail.anime.clone(),
+                episodes: detail.episodes.clone(),
+                img: Some(handle),
+                back_to: detail.back_to.clone(),
+            }));
             }
             Task::none()
         }
@@ -187,7 +208,7 @@ impl AnimeTimeline{
                     move |res| Message::FavThumbLoaded{ mal_id : id, result: res},
                 ));
             }
-            return Task::batch(tasks);
+            Task::batch(tasks)
         }
         Message::FavThumbLoaded { mal_id, result } =>{
             if let Ok(handle) = result{
@@ -227,7 +248,7 @@ impl AnimeTimeline{
         Message::ClearFilters =>{
             self.selected_genre = None;
             self.selected_type = None;
-            self.selected_sort = SortMode::ScoreDesc;
+            self.selected_sort = SortMode::Default;
 
             let query = self.search_text.trim().to_string();
             if query.is_empty(){
@@ -237,39 +258,43 @@ impl AnimeTimeline{
                 Task::done(Message::SearchRequested)
             }
         }
-        Message::EpisodeClicked(ep_nr) =>{
-            let anime_id = match &self.current_screen{
-                Screen::Detail(anime,_ ,_ ) => anime.mal_id,
-                _ => return Task::none(), //daca nu suntem in detail nu trb sa facem nimic
-            };
-            if let Screen::Detail(_,episodes ,_ ) = &self.current_screen{
-                if let Some(ep) = episodes.iter().find(|e| e.mal_id == ep_nr){
-                    if ep.synopsis.is_some(){
-                        return Task::none(); //daca am avut deja synopisul incarcat nu trb sa facem refetch
-                    }
-                }
+       Message::EpisodeClicked(ep_nr) =>{
+        let anime_id = match &self.current_screen{
+            Screen::Detail(detail) => detail.anime.mal_id,
+            _ => return Task::none(), //daca nu suntem in detail nu trb sa facem nimic
+        };
+        if let Screen::Detail(detail) = &self.current_screen
+            && let Some(ep) = detail.episodes.iter().find(|e| e.mal_id == ep_nr)
+            && ep.synopsis.is_some(){
+                return Task::none(); //daca am avut deja synopisul incarcat nu trb sa facem refetch
             }
-            self.loading_episode = Some(ep_nr);
-            Task::perform(
-                async move {
-                    jikan::get_episode_detail(anime_id,ep_nr).await.map_err(|e| e.to_string())
-                }, move |res| Message::EpisodeDetailLoaded { ep_nr, result: res })
-        }
+        self.loading_episode = Some(ep_nr);
+        Task::perform(
+            async move {
+                jikan::get_episode_detail(anime_id,ep_nr).await.map_err(|e| e.to_string())
+            },
+            move |res| Message::EpisodeDetailLoaded { ep_nr, result: res },
+        )
+    }
         Message::EpisodeDetailLoaded { ep_nr, result } =>{
             self.loading_episode = None;
 
-            if let Ok(detail) = result {
-                if let Screen::Detail(anime,episodes ,img ) = &mut self.current_screen{
-                    if let Some(ep) = episodes.iter_mut().find(|e| e.mal_id == ep_nr){
-                        ep.synopsis = detail.synopsis;
-                    }
-                    self.current_screen = Screen::Detail(anime.clone(), episodes.clone(), img.clone());
+            if let Ok(detail) = result && 
+            let Screen::Detail(detail_screen) = &mut self.current_screen{
+                if let Some(ep) = detail_screen.episodes.iter_mut().find(|e| e.mal_id == ep_nr){
+                    ep.synopsis = detail.synopsis;
                 }
-            }
+                self.current_screen = Screen::Detail(Box::new(DetailScreen{
+                    anime: detail_screen.anime.clone(),
+                    episodes: detail_screen.episodes.clone(),
+                    img: detail_screen.img.clone(),
+                    back_to: detail_screen.back_to.clone(),
+                }));
+}
             Task::none()
         }
         Message::ToggleWatched { anime_id, ep_nr } =>{
-            let list = self.watched.entry(anime_id).or_insert(Vec::new());
+            let list = self.watched.entry(anime_id).or_default();
             let before = list.len();
             list.retain(|&x| x!= ep_nr);
             if list.len() == before {
@@ -291,7 +316,7 @@ impl AnimeTimeline{
     pub fn view(&self) -> Element<'_, Message>{
         match &self.current_screen{
             Screen::Search => self.view_search(),
-            Screen::Detail(anime,episodes,img_handle ) => self.view_detail(anime,episodes, img_handle),
+            Screen::Detail(detail) => self.view_detail(&detail.anime, &detail.episodes, &detail.img),
             Screen::SearchOverlay=> self.view_search_overlay(),
         }
     }
@@ -429,16 +454,16 @@ impl AnimeTimeline{
         ].padding(20).spacing(20).into()
     }
 
-    fn view_detail(&self, anime:&AnimeItem, episodes: &Vec<EpisodeItem>, img_handle:&Option<Handle>) -> Element<'_,Message>{
+    fn view_detail(&self, anime:&AnimeItem, episodes: &[EpisodeItem], img_handle:&Option<Handle>) -> Element<'_,Message>{
         let is_fav = self.favorites.iter().any(|f| f.mal_id == anime.mal_id);
         let fav_btn = if is_fav{
-            button("Unfavorite").on_press(Message::ToggleFavorite((anime.clone())))
+            button("Unfavorite").on_press(Message::ToggleFavorite(anime.clone()))
         }
         else {
-            button("Favorite").on_press(Message::ToggleFavorite((anime.clone())))
+            button("Favorite").on_press(Message::ToggleFavorite(anime.clone()))
         };
         let img_element: Element<Message> = match img_handle{
-            Some(handle) => image(handle.clone()).width(iced::Length::Fixed((200.0))).height(iced::Length::Fixed(300.0)).into(),
+            Some(handle) => image(handle.clone()).width(iced::Length::Fixed(200.0)).height(iced::Length::Fixed(300.0)).into(),
             None => Container::new(text("Loading Image..."))
                 .width(iced::Length::Fixed(200.0)).height(iced::Length::Fixed(300.0))
                 .center_x(iced::Length::Fill).center_y(iced::Length::Fill).into(),
@@ -505,7 +530,7 @@ impl AnimeTimeline{
         ).height(iced::Length::Fill).into()
     };
         column![
-            button("<- Back").on_press(Message::BackToSearch),
+            button("<- Back").on_press(Message::Back),
             header_row,
             text("Episodes:").size(22),//Header
             episode_list

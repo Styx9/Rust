@@ -1,4 +1,4 @@
-use iced::alignment::Vertical::Top;
+#![allow(clippy::to_string_trait_impl)]
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize)]
 
@@ -75,19 +75,22 @@ impl ToString for AnimeType {
 }
 #[derive(Debug,Clone,Copy,PartialEq, Eq)]
 pub enum SortMode{
+    Default,
     ScoreDesc,
     PopularityAsc,
 }
 impl SortMode{
-    pub const ALL: [SortMode; 2] = [
+    pub const ALL: [SortMode; 3] = [
         SortMode::ScoreDesc,
         SortMode::PopularityAsc,
+        SortMode::Default,
     ];
 
         pub fn order_by(&self) -> &'static str {
         match self {
             SortMode::ScoreDesc => "score",
             SortMode::PopularityAsc => "popularity",
+            SortMode::Default => "",
         }
     }
 
@@ -95,6 +98,7 @@ impl SortMode{
         match self {
             SortMode::ScoreDesc => "desc",
             SortMode::PopularityAsc => "asc",
+            SortMode::Default => "",
         }
     }
 }
@@ -103,6 +107,7 @@ impl SortMode{
             match self{
                 Self::ScoreDesc => "Score (high -> low)",
                 Self::PopularityAsc => "Popularity (best->worst)",
+                Self::Default => "Default",
             }.to_string()
         }
     }
