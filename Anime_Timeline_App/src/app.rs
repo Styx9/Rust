@@ -2,8 +2,16 @@ use crate::api::models::{AnimeItem,EpisodeItem,AnimeType,SortMode,Genre,BASIC_GE
 use iced::widget::{Column, Container, button,pick_list, column, checkbox, image, row, scrollable, text, text_input};
 use iced::{Element, Task,Length,Alignment};
 use iced::widget::image::Handle;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::api::jikan;
+
+#[derive(Debug, Clone,Serialize,Deserialize)]
+pub struct AnimePreview{
+    mal_id:u32,
+    title:String,
+    image_url:String,
+}
 
 #[derive(Debug, Clone)]
 pub enum Screen{
@@ -31,9 +39,12 @@ pub struct AnimeTimeline{
     selected_type: Option<AnimeType>,
     selected_sort: SortMode,
     watched: HashMap<u32,Vec<u32>>,
+    recent_watch: Vec<u32>,
+    recent_info: HashMap<u32,AnimePreview>
 }
 impl Default for AnimeTimeline{
     fn default() -> Self{
+        let (watched_map,recent_vec,recent_info_map) = crate::storage::load_watched();
         Self{
             search_text: String::new(),
             search_result: Vec::new(),
@@ -45,7 +56,9 @@ impl Default for AnimeTimeline{
             selected_type: None,
             selected_sort: SortMode::Default,
             loading_episode:None,
-            watched: crate::storage::load_watched(),
+            watched: watched_map,
+            recent_watch: recent_vec,
+            recent_info: recent_info_map,
         }
     }
 }
@@ -65,6 +78,7 @@ pub enum Message{
     ClearSearch,
     LoadFavThumbs,
     FavThumbLoaded{mal_id:u32,result: Result<Handle,String>},
+    LoadRecentThumbs,
    GenreChanged(Genre),
     TypeChanged(AnimeType),
     SortChanged(SortMode),
@@ -210,6 +224,27 @@ impl AnimeTimeline{
             }
             Task::batch(tasks)
         }
+        Message::LoadRecentThumbs =>{
+            let mut tasks = Vec::new();
+            for &anime_id in &self.recent_watch{
+                if self.fav_thumbs.contains_key(&anime_id){
+                    continue;
+                }
+                let preview = match self.recent_info.get(&anime_id){
+                    Some(p) => p,
+                    None => continue,
+                };
+                let url = preview.image_url.clone();
+                tasks.push(Task::perform(
+                    async move {
+                        let bytes = jikan::get_image(url).await.map_err(|e| e.to_string())?;
+                        Ok(Handle::from_bytes(bytes))
+                    },
+                    move |res| Message::FavThumbLoaded{ mal_id: anime_id, result: res}
+                ));
+            }
+            Task::batch(tasks)
+        }
         Message::FavThumbLoaded { mal_id, result } =>{
             if let Ok(handle) = result{
                 self.fav_thumbs.insert(mal_id,handle );
@@ -299,17 +334,36 @@ impl AnimeTimeline{
             list.retain(|&x| x!= ep_nr);
             if list.len() == before {
                 list.push(ep_nr);
+                if let Some(x) = self.recent_watch.iter().position(|&x| x == anime_id) {self.recent_watch.remove(x);}
+                self.recent_watch.insert(0, anime_id);
             }
-
+            let max_recent = 15;
+            if self.recent_watch.len() > max_recent{
+                self.recent_watch.truncate(max_recent);
+            }
+                if let Screen::Detail(detail)  = &self.current_screen 
+                   && detail.anime.mal_id == anime_id{
+                        let preview = AnimePreview{
+                            mal_id: anime_id,
+                            title: detail.anime.title.clone(),
+                            image_url: detail.anime.images.jpg.image_url.clone(),
+                        };
+                        self.recent_info.insert(anime_id, preview);
+                    
+                }
             let remove_key = match self.watched.get(&anime_id){ //daca am dat untoggle la toate episoadele stergem si cheia
                 Some(v) => v.is_empty(),
                 None => false,
             };
             if remove_key{
                 self.watched.remove(&anime_id);
+                if let Some(x) = self.recent_watch.iter().position(|&x| x == anime_id){
+                    self.recent_watch.remove(x);
+                }
+                self.recent_info.remove(&anime_id);
             }
-            crate::storage::save_watched(&self.watched);
-            Task::none()
+            crate::storage::save_watched(&self.watched,&self.recent_watch,&self.recent_info);
+            Task::done(Message::LoadRecentThumbs)
         }
       }
     }
@@ -337,6 +391,7 @@ impl AnimeTimeline{
         column![
             search_bar,
             self.view_fav(),
+            self.view_watched_recent(),
         ].padding(20).spacing(20).into()
     }
   fn view_fav(&self) -> Element<'_, Message> {
@@ -401,6 +456,79 @@ impl AnimeTimeline{
     .spacing(10)
     .into()
 }
+ fn view_watched_recent(&self) -> Element<'_,Message>
+ {
+    use iced::widget::{button, column, container, row, scrollable, text, Container};
+    use iced::widget::scrollable::Direction;
+    use iced::{Alignment, Length};
+
+    if self.recent_watch.is_empty() {
+        return text("No recent watched yet")
+            .size(14)
+            .style(text::secondary)
+            .into();
+    }
+
+    let watched_row = row(self.recent_watch.iter().map(|&id| {
+        let preview = match self.recent_info.get(&id) {
+            Some(p) => p,
+            None => {
+                return Container::new(text("Missing info")).width(Length::Fixed(75.0)).into();
+            }
+        };
+        let thumb: Element<Message> = if let Some(handle) = self.fav_thumbs.get(&id){
+            image(handle.clone()).width(Length::Fixed(100.0)).height(Length::Fixed(140.0)).into()
+        }
+        else {
+        Container::new(text("IMG").size(10))
+            .width(Length::Fixed(100.0))
+            .height(Length::Fixed(140.0))
+            .style(|_| container::Style {
+                background: Some(iced::Color::from_rgb(1.0, 0.0, 1.0).into()),
+                border: iced::Border {
+                    color: iced::Color::from_rgb(1.0, 0.0, 0.0),
+                    width: 3.0,
+                    radius: 5.0.into(),
+                },
+                text_color: Some(iced::Color::WHITE),
+                ..Default::default()
+            }).into()};
+        let card_content = column![
+            thumb,
+            text(&preview.title)
+                .size(12)
+                .width(Length::Fixed(100.0))
+                .wrapping(text::Wrapping::Word)
+                .align_x(Alignment::Center),
+        ]
+        .spacing(5)
+        .align_x(Alignment::Center);
+            if let Some(anime) = self.favorites.iter().find(|a| a.mal_id == id){
+                button(card_content)
+            .padding(5)
+            .on_press(Message::AnimeSelected(anime.clone()))
+            .into()
+            }
+            else {
+                button(card_content).padding(5).into()
+            }
+    }))
+    .spacing(15)
+    .padding([0, 10]); 
+
+    column![
+        text(format!("Recently watched:"))
+            .size(20)
+            .font(iced::font::Font::MONOSPACE),
+
+        scrollable(watched_row)
+            .direction(Direction::Horizontal(scrollable::Scrollbar::default()))
+            .height(Length::Fixed(230.0))
+            .width(Length::Fill),
+    ]
+    .spacing(10)
+    .into()
+ }
     fn view_search_overlay(&self) -> Element<'_,Message>
     {
          let search_bar = row![

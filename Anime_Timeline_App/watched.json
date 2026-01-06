@@ -1,12 +1,40 @@
 {
-  "20": [
-    1,
-    2,
-    3,
-    4,
-    9,
-    10,
-    41,
-    42
-  ]
+  "watched": {
+    "44511": [
+      1,
+      2,
+      3
+    ],
+    "28223": [
+      1,
+      2,
+      3
+    ],
+    "40748": [
+      8,
+      9
+    ]
+  },
+  "recent_watch": [
+    28223,
+    40748,
+    44511
+  ],
+  "recent_info": {
+    "28223": {
+      "mal_id": 28223,
+      "title": "Death Parade",
+      "image_url": "https://cdn.myanimelist.net/images/anime/5/71553.jpg"
+    },
+    "44511": {
+      "mal_id": 44511,
+      "title": "Chainsaw Man",
+      "image_url": "https://cdn.myanimelist.net/images/anime/1806/126216.jpg"
+    },
+    "40748": {
+      "mal_id": 40748,
+      "title": "Jujutsu Kaisen",
+      "image_url": "https://cdn.myanimelist.net/images/anime/1171/109222.jpg"
+    }
+  }
 }

@@ -1,9 +1,22 @@
-use std::fs;
-use crate::api::models::AnimeItem;
+use std::{fs};
+use serde::{Deserialize, Serialize};
+
+use crate::{api::models::AnimeItem, app::AnimePreview};
 use std::collections::HashMap;
 const F_NAME: &str = "favorites.json";
 const WF_NAME: &str = "watched.json";
 
+#[derive(Debug,Deserialize,Serialize)]
+struct Watched { 
+  watched: HashMap<u32,Vec<u32>>,
+  recent_watch: Vec<u32>,
+  recent_info: HashMap<u32,AnimePreview>
+}
+type WatchedLoad = (
+    HashMap<u32, Vec<u32>>,
+    Vec<u32>,
+    HashMap<u32, AnimePreview>,
+);
 pub fn save_fav(favorites: &Vec<AnimeItem>)
 {
     let json_txt = match serde_json::to_string_pretty(favorites){
@@ -35,8 +48,9 @@ pub fn load_fav() -> Vec<AnimeItem>{
         }
     }
 }
-pub fn save_watched(watched: &HashMap<u32,Vec<u32>>){
-    let json_txt  = match serde_json::to_string_pretty(watched){
+pub fn save_watched(watched: &HashMap<u32,Vec<u32>>,recent:&[u32],recent_info: &HashMap<u32,AnimePreview>){
+    let data = Watched { watched: watched.clone(), recent_watch: recent.to_owned(),recent_info: recent_info.clone()};
+    let json_txt  = match serde_json::to_string_pretty(&data){
         Ok(text) =>text,
         Err(e) =>{
             eprint!("Error converting watched to json: {}",e);
@@ -48,15 +62,15 @@ pub fn save_watched(watched: &HashMap<u32,Vec<u32>>){
         Err(e)=> eprintln!("Error writing to file: {}",e),
     }
 }
-pub fn load_watched() ->HashMap<u32,Vec<u32>>{
+pub fn load_watched() ->WatchedLoad{
     match fs::read_to_string(WF_NAME){
-        Ok(json_text) => match serde_json::from_str::<HashMap<u32,Vec<u32>>>(&json_text){
-            Ok(map) =>map,
+        Ok(json_text) => match serde_json::from_str::<Watched>(&json_text){
+            Ok(map) =>(map.watched,map.recent_watch,map.recent_info),
             Err(e) =>{
                 eprint!("Error parsing watched.json {}",e);
-                HashMap::new()
+                (HashMap::new(),Vec::new(),HashMap::new())
             }
         },
-        Err(_) => HashMap::new(),
+        Err(_) => (HashMap::new(),Vec::new(),HashMap::new()),
     }
 }
